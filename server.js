@@ -15,7 +15,7 @@ app.use(express.json({ limit: "2mb" }));
 // ----- Paths
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
-const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
 const UPLOADS_DIR = path.join(ROOT, "uploads");
 const DB_FILE = path.join(DATA_DIR, "notas.json");
 
