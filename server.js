@@ -110,7 +110,7 @@ function saveDB(notas) {
   fs.writeFileSync(DB_FILE, JSON.stringify(notas, null, 2), "utf8");
 }
 
-// ----- Batch (martes 00:00)
+// ----- Batch (lunes 00:00)
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -131,14 +131,14 @@ function getCurrentBatchKey(now = new Date()) {
   // Usar hora de México para determinar el día
   const mxDate = getMexicoDate(now);
 
-  // martes más reciente a las 00:00 (hora México)
+  // lunes más reciente a las 00:00 (hora México)
   // JS: 0=Dom,1=Lun,2=Mar,3=Mié...
   const day = mxDate.getDay();
-  const daysSinceTuesday = (day - 2 + 7) % 7;
+  const daysSinceMonday = (day - 1 + 7) % 7;
 
   const d = new Date(mxDate);
   d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - daysSinceTuesday);
+  d.setDate(d.getDate() - daysSinceMonday);
   return ymd(d);
 }
 
@@ -524,5 +524,5 @@ app.get("/api/faltantes", (req, res) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`Batch actual (martes 00:00): ${getCurrentBatchKey()}`);
+  console.log(`Batch actual (lunes 00:00): ${getCurrentBatchKey()}`);
 });
