@@ -65,8 +65,12 @@ async function runBackup() {
 
     } catch (error) {
         console.error("❌ Error durante el backup:", error);
-        process.exit(1);
+        throw error;
     }
 }
 
-runBackup();
+module.exports = runBackup;
+
+if (require.main === module) {
+    runBackup().catch(() => process.exit(1));
+}
