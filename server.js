@@ -37,7 +37,7 @@ if (USE_PERSISTENT) {
 const DB_FILE = path.join(DATA_DIR, "notas.json");
 
 // ----- Backup Automático cada 24h a R2
-const R2_ENABLED = process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID;
+const R2_ENABLED = process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET;
 if (R2_ENABLED) {
   const backup = require("./scripts/backup");
   // Ejecutar uno al iniciar (después de 30s para no saturar el arranque)

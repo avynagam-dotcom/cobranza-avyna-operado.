@@ -18,8 +18,7 @@ async function runBackup() {
     const SOURCE_DIR = fs.existsSync(DATA_DIR) ? DATA_DIR : path.join(__dirname, "..");
 
     if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
-        console.error("❌ Faltan variables de entorno para el backup (R2)");
-        process.exit(1);
+        throw new Error("Faltan variables de entorno para el backup (R2)");
     }
 
     const date = new Date().toISOString().split("T")[0];
