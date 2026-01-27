@@ -875,6 +875,24 @@
         return a.includes(q) || b.includes(q) || c.includes(q);
       });
 
+      // Ordenar: Deudas vigentes primero, Liquidadas al final
+      filtered.sort((a, b) => {
+        const statA = (a.statusCredito || "").toUpperCase();
+        const statB = (b.statusCredito || "").toUpperCase();
+
+        // Liquidado siempre va al final
+        const isLiqA = statA === "LIQUIDADO";
+        const isLiqB = statB === "LIQUIDADO";
+        if (isLiqA && !isLiqB) return 1;
+        if (!isLiqA && isLiqB) return -1;
+
+        // Si ambos están en el mismo grupo (vigentes o liquidados),
+        // ordenar por fecha (más reciente primero)
+        const dateA = new Date(a.uploadedAt || a.batchKey || 0);
+        const dateB = new Date(b.uploadedAt || b.batchKey || 0);
+        return dateB - dateA;
+      });
+
       render(filtered);
     }
 
@@ -926,7 +944,8 @@
           saldo: (n.saldo ?? null),
           deliveredAt: n.deliveredAt || null,
           dueAt: n.dueAt || null,
-          statusCredito: n.statusCredito || null
+          statusCredito: n.statusCredito || null,
+          uploadedAt: n.uploadedAt || null
         }));
 
         window.__allNotas = notas;
