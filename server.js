@@ -12,29 +12,14 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-// ----- Paths
-// ----- Paths configuration (Render Persistent Disk Support)
+// ----- Persistence Integration
+const persistence = require("./utils/persistence");
+persistence.init();
+
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 
-// Detectar Persistent Disk de Render
-const RENDER_DISK_PATH = "/var/data/cobranza";
-// Usamos el disco solo si existe físicamente
-const USE_PERSISTENT = fs.existsSync(RENDER_DISK_PATH);
-
-let DATA_DIR, UPLOADS_DIR;
-
-if (USE_PERSISTENT) {
-  console.log(`[System] Usando Persistent Disk en: ${RENDER_DISK_PATH}`);
-  DATA_DIR = path.join(RENDER_DISK_PATH, "data");
-  UPLOADS_DIR = path.join(RENDER_DISK_PATH, "uploads");
-} else {
-  console.log(`[System] Usando almacenamiento local (ephemeral/local)`);
-  DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
-  UPLOADS_DIR = path.join(ROOT, "uploads");
-}
-
-const DB_FILE = path.join(DATA_DIR, "notas.json");
+const { DATA_DIR, UPLOADS_DIR, USE_PERSISTENT, loadDB, saveDB } = persistence;
 
 // ----- Backup Automático cada 24h a R2
 const R2_ENABLED = process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET;
@@ -50,10 +35,7 @@ if (R2_ENABLED) {
   }, 24 * 60 * 60 * 1000);
 }
 
-// Ensure folders exist (Critical for new locations)
-for (const dir of [DATA_DIR, UPLOADS_DIR]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
+// Folders ensured by persistence.init()
 
 // ----- Migration: Local -> Persistent (Idempotent)
 // Se ejecuta solo si estamos en Render (Persistent) y detectamos archivos locales que no están en el disco
@@ -96,19 +78,7 @@ if (USE_PERSISTENT) {
   }
 }
 
-// ----- DB helpers
-function loadDB() {
-  try {
-    const raw = fs.readFileSync(DB_FILE, "utf8");
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-function saveDB(notas) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(notas, null, 2), "utf8");
-}
+// DB Helpers delegated to utils/persistence.js
 
 // ----- Batch (lunes 00:00)
 function pad2(n) {
