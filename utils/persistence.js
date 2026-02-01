@@ -72,7 +72,7 @@ function saveDB(data) {
     try {
         // Serializar
         const content = JSON.stringify(data, null, 2);
-        
+
         // 1. Escribir a temporal
         fs.writeFileSync(tempFile, content, "utf8");
 
@@ -87,12 +87,12 @@ function saveDB(data) {
 
         // 4. Auditoría
         auditChange("saveDB", { size: stats.size, timestamp: new Date().toISOString() });
-        
+
     } catch (err) {
         console.error(`[Persistence] CRITICAL SAVE ERROR: ${err.message}`);
         // Intentar limpiar tmp si quedó corrupto
         if (fs.existsSync(tempFile)) {
-            try { fs.unlinkSync(tempFile); } catch (e) {}
+            try { fs.unlinkSync(tempFile); } catch (e) { }
         }
         throw err; // Re-lanzar para que el endpoint sepa que falló
     }

@@ -21,19 +21,9 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 
 const { DATA_DIR, UPLOADS_DIR, USE_PERSISTENT, loadDB, saveDB } = persistence;
 
-// ----- Backup Automático cada 24h a R2
-const R2_ENABLED = process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET;
-if (R2_ENABLED) {
-  const backup = require("./scripts/backup");
-  // Ejecutar uno al iniciar (después de 30s para no saturar el arranque)
-  setTimeout(() => {
-    backup().catch(err => console.error("[AutoBackup] Fallo inicial:", err.message));
-  }, 30000);
-  // Y luego cada 24 horas
-  setInterval(() => {
-    backup().catch(err => console.error("[AutoBackup] Fallo periódico:", err.message));
-  }, 24 * 60 * 60 * 1000);
-}
+// ----- Backup Automático (Scheduler)
+const { initScheduler } = require('./utils/scheduler');
+initScheduler();
 
 // Folders ensured by persistence.init()
 
