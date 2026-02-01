@@ -27,7 +27,7 @@ async function runBackup() {
     }
 
     const date = new Date().toISOString().split("T")[0];
-    const filename = `backup-${date}.tar.gz`;
+    const filename = `backup-operado-${date}.tar.gz`;
     const key = `${PREFIX}/${filename}`;
     const archivePath = path.join("/tmp", filename);
 
