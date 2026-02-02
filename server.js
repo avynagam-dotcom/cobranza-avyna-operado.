@@ -217,7 +217,7 @@ function computeCredito(nota, now = new Date()) {
 
   // Recalcular pagado desde array pagos
   const pagado = Array.isArray(nota.pagos)
-    ? nota.pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0)
+    ? nota.pagos.reduce((acc, p) => acc + (p && Number(p.monto) || 0), 0)
     : (nota.pagado || 0);
 
   let saldo = null;
