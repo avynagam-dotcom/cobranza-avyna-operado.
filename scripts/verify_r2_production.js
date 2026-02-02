@@ -20,12 +20,29 @@ async function runVerification() {
         const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
         const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
         const R2_BUCKET = process.env.R2_BUCKET;
-        const SYSTEM_NAME = process.env.SYSTEM_NAME || "Unknown-System";
+
+        // SYSTEM_NAME Critical Check
+        const rawSystemName = process.env.SYSTEM_NAME;
+        const SYSTEM_NAME = rawSystemName || "Unknown-System";
+        const namespace = SYSTEM_NAME.toLowerCase();
+
+        console.log("\n==========================================");
+        console.log(`🔎 VALIDACIÓN DE IDENTIDAD`);
+        console.log(`   Sistema:      [${SYSTEM_NAME}]`);
+        console.log(`   Carpeta R2:   [${namespace}/]`);
+        console.log("==========================================\n");
+
+        if (!rawSystemName) {
+            console.error("⚠️  [ADVERTENCIA CRÍTICA]: 'SYSTEM_NAME' NO ESTÁ CONFIGURADO.");
+            console.error("    El backup caerá en 'unknown-system' y podría SOBREESCRIBIR otros datos.");
+            console.error("    CONFIGURA LA VARIABLE EN RENDER INMEDIATAMENTE.\n");
+            // We proceed just to test connectivity, but with giant warning
+        }
 
         if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
             throw new Error("Faltan variables de entorno CRÍTICAS (R2_ENDPOINT, etc). ¿Estás en Render?");
         }
-        log("✅ Variables de entorno detectadas.");
+        log("✅ Credenciales R2 detectadas.");
 
         // 2. Verificar Datos Reales (Disco Persistente)
         // Intentar ubicar el archivo real
@@ -47,9 +64,7 @@ async function runVerification() {
             }
         }
 
-        log(`📂 Base de Datos Real (${SYSTEM_NAME}):`);
-        log(`   Ruta: ${dbPathFound || "NO ENCONTRADA"}`);
-        log(`   Peso: ${dbSize}`);
+        log(`📂 Base de Datos Real: ${dbSize} (${dbPathFound || "Ruta no hallada"})`);
 
         // 3. Prueba de Conectividad (Subida)
         const s3 = new S3Client({
@@ -61,12 +76,12 @@ async function runVerification() {
             },
         });
 
-        const testFilename = "r2_connectivity_test.txt";
-        const fileContent = `Connectivity Check for ${SYSTEM_NAME}\nDate: ${new Date().toISOString()}\nDB Size: ${dbSize}`;
-        const namespace = SYSTEM_NAME.toLowerCase();
+        const testFilename = "identity_check.txt";
+        // Force timestamp to avoid caching/collision during rapid testing
+        const fileContent = `Identity Check\nSystem: ${SYSTEM_NAME}\nNamespace: ${namespace}\nDate: ${new Date().toISOString()}`;
         const key = `${namespace}/diagnostics/${testFilename}`;
 
-        log(`🚀 Intentando subir archivo de prueba a: ${key}`);
+        log(`🚀 Subiendo testigo a: [${key}] ...`);
 
         const command = new PutObjectCommand({
             Bucket: R2_BUCKET,
@@ -77,17 +92,11 @@ async function runVerification() {
 
         const response = await s3.send(command);
 
-        log(`✅ SUBIDA EXITOSA`);
-        log(`   ETag: ${response.ETag}`);
-        log(`   ServerSideEncryption: ${response.ServerSideEncryption || "N/A"}`);
-        log(`   RequestID: ${response.$metadata.requestId}`);
-
-        console.log("\n==========================================");
-        console.log("   COPIA Y PEGA ESTO EN EL REPORTE:");
-        console.log(`   Sistema: ${SYSTEM_NAME}`);
-        console.log(`   Peso DB: ${dbSize}`);
-        console.log(`   ETag Cloudflare: ${response.ETag}`);
-        console.log("==========================================\n");
+        console.log("\n✅ [PRUEBA EXITOSA] - RECIBO DE CONFIRMACIÓN:");
+        console.log(`   Sistema:      ${SYSTEM_NAME}`);
+        console.log(`   Ruta Final:   ${key}`);
+        console.log(`   ETag:         ${response.ETag}`);
+        console.log("\n");
 
     } catch (error) {
         logError("FALLO CRÍTICO EN VERIFICACIÓN", error);
