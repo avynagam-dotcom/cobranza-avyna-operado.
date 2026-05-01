@@ -51,7 +51,12 @@ function loadDB() {
         if (!fs.existsSync(DB_FILE)) return [];
         const raw = fs.readFileSync(DB_FILE, "utf8");
         const data = JSON.parse(raw);
-        return Array.isArray(data) ? data : [];
+        if (!Array.isArray(data)) return [];
+        return data.map(n => ({
+            ...n,
+            total: (typeof n.total === 'number' && Number.isFinite(n.total)) ? n.total : null,
+            pagado: (typeof n.pagado === 'number' && Number.isFinite(n.pagado)) ? n.pagado : 0,
+        }));
     } catch (err) {
         console.error(`[Persistence] Error cargando DB: ${err.message}`);
         return [];

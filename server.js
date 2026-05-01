@@ -12,6 +12,19 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
+// C1: Auth HTTP Basic opt-in (activa solo si ADMIN_USER + ADMIN_PASS están seteadas)
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASS = process.env.ADMIN_PASS;
+if (ADMIN_USER && ADMIN_PASS) {
+  const expectedToken = Buffer.from(`${ADMIN_USER}:${ADMIN_PASS}`).toString('base64');
+  app.use((req, res, next) => {
+    const auth = req.headers.authorization || '';
+    if (auth.startsWith('Basic ') && auth.slice(6) === expectedToken) return next();
+    res.set('WWW-Authenticate', 'Basic realm="Avyna Cobranza Operado"');
+    return res.status(401).send('Acceso restringido');
+  });
+}
+
 // ----- Persistence Integration
 const persistence = require("./utils/persistence");
 persistence.init();
@@ -41,7 +54,10 @@ function saveStatus(data) {
 
 // ----- Backup Automático (Scheduler)
 const { initScheduler } = require('./utils/scheduler');
-initScheduler();
+initScheduler({ dataDir: DATA_DIR, uploadsDir: UPLOADS_DIR });
+
+// M4: Margen configurable
+const MARGIN = parseFloat(process.env.MARGIN_PCT || '0.4');
 
 // Folders ensured by persistence.init()
 
@@ -326,6 +342,18 @@ function extractClienteFromText(text) {
   return null;
 }
 
+// I5: Rate limiting en uploads (sin dependencias externas)
+const _uploadAttempts = new Map();
+function _checkUploadRate(ip) {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const limit = 20;
+  const prev = (_uploadAttempts.get(ip) || []).filter(t => now - t < windowMs);
+  if (prev.length >= limit) return false;
+  _uploadAttempts.set(ip, [...prev, now]);
+  return true;
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
@@ -398,6 +426,10 @@ app.get("/api/notas", (req, res) => {
 });
 
 app.post("/api/upload", upload.single("pdf"), async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!_checkUploadRate(ip)) {
+    return res.status(429).json({ ok: false, message: "Demasiados intentos. Espera un momento." });
+  }
   try {
     const batchKey = getCurrentBatchKey();
     if (!req.file || !req.file.buffer) return res.status(400).json({ ok: false, message: "No PDF" });
@@ -554,8 +586,8 @@ app.get("/api/kpis", (req, res) => {
   const totalSaldo = Math.max(totalCobrable - totalCobrado, 0);
   const pctCobranza = totalCobrable > 0 ? totalCobrado / totalCobrable : 0;
 
-  const utilidadCobrada = totalCobrado * 0.4;
-  const utilidadPorCobrar = totalSaldo * 0.4;
+  const utilidadCobrada = totalCobrado * MARGIN;
+  const utilidadPorCobrar = totalSaldo * MARGIN;
 
   res.json({
     ok: true,

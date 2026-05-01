@@ -4,10 +4,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "backup": "node scripts/backup.js"
+    "backup": "node scripts/backup.js",
+    "check": "node health-check.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
+    "dotenv": "^17.2.3",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",

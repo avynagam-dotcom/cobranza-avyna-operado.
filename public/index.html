@@ -124,10 +124,11 @@
     }
 
     .kpiValue {
-      font-size: 28px;
+      font-size: clamp(13px, 4vw, 26px);
       font-weight: 950;
       margin-top: 4px;
-      line-height: 1.05
+      line-height: 1.05;
+      letter-spacing: -0.5px;
     }
 
     .kpiSub {
@@ -335,6 +336,33 @@
     .dot.red {
       background: var(--red)
     }
+
+    /* Cuadrito vencidos */
+    .vencidoBox {
+      display: none;
+      align-items: center;
+      gap: 14px;
+      margin: 10px 0 6px 0;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 90, 90, 0.35);
+      background: rgba(255, 90, 90, 0.08);
+    }
+    .vencidoBox.show { display: flex; }
+    .vbLabel {
+      font-size: 12px;
+      font-weight: 900;
+      color: var(--red);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .vbAmt {
+      font-size: 22px;
+      font-weight: 950;
+      color: var(--red);
+      letter-spacing: -0.5px;
+    }
+    .vbSub { font-size: 12px; color: rgba(233,238,252,.60); }
 
     .tableWrap {
       width: 100%;
@@ -692,6 +720,15 @@
       </div>
     </div>
 
+    <!-- Cuadrito vencidos (solo en modo pendientes) -->
+    <div id="vencidoBox" class="vencidoBox">
+      <div>
+        <div class="vbLabel">Recuperable de vencidos</div>
+        <div class="vbAmt" id="vbAmt">—</div>
+        <div class="vbSub" id="vbSub"></div>
+      </div>
+    </div>
+
     <div class="tableWrap">
       <table>
         <thead>
@@ -774,6 +811,11 @@
     const backBatchBtn = document.getElementById("backBatchBtn");
     const reportBtn = document.getElementById("reportBtn");
     const timerDisplay = document.getElementById("timerDisplay");
+
+    // Vencidos box
+    const vencidoBox = document.getElementById("vencidoBox");
+    const vbAmt = document.getElementById("vbAmt");
+    const vbSub = document.getElementById("vbSub");
     
     // Partners (Print)
     const partnersList = document.getElementById("partnersList");
@@ -1005,10 +1047,28 @@
         } else {
              // Mode filter
              if (window.__viewMode === "pendientes") {
-                 // Entregadas con saldo > 0
-                 filtered = filtered.filter(n => n.deliveredAt && n.saldo && n.saldo > 0);
-                 modeHint.textContent = "Viendo pendientes de cobro (Global)";
+                 // Entregadas con saldo > 0, vencidos primero
+                 filtered = filtered
+                   .filter(n => n.deliveredAt && n.saldo && n.saldo > 0)
+                   .sort((a, b) => {
+                     const rank = s => { const u = (s||"").toUpperCase(); return u==="VENCIDO"?0:u==="POR_VENCER"?1:u==="EN_PLAZO"?2:3; };
+                     const ra = rank(a.statusCredito), rb = rank(b.statusCredito);
+                     if (ra !== rb) return ra - rb;
+                     return (b.saldo||0) - (a.saldo||0);
+                   });
+                 // Cuadrito vencidos
+                 const vencidos = filtered.filter(n => (n.statusCredito||"").toUpperCase()==="VENCIDO");
+                 const totalVencido = vencidos.reduce((acc, n) => acc + (n.saldo||0), 0);
+                 if (vencidos.length > 0) {
+                   vbAmt.textContent = money(totalVencido);
+                   vbSub.textContent = `${vencidos.length} cliente${vencidos.length===1?"":"s"} vencido${vencidos.length===1?"":"s"}`;
+                   vencidoBox.classList.add("show");
+                 } else {
+                   vencidoBox.classList.remove("show");
+                 }
+                 modeHint.textContent = "Pendientes — vencidos primero, luego por saldo.";
              } else {
+                 vencidoBox.classList.remove("show");
                  // Batch Default
                  if (window.__batchKey) {
                      filtered = filtered.filter(n => String(n.batchKey) === String(window.__batchKey));
