@@ -237,7 +237,11 @@ function computeCredito(nota, now = new Date()) {
     : (nota.pagado || 0);
 
   let saldo = null;
-  if (total != null) saldo = Math.max(total - pagado, 0);
+  let saldoFavor = 0;
+  if (total != null) {
+    saldo = Math.max(total - pagado, 0);
+    saldoFavor = Math.max(pagado - total, 0);
+  }
 
   let statusCredito = "PRE_ENTREGA";
   if (deliveredAt) {
@@ -259,6 +263,7 @@ function computeCredito(nota, now = new Date()) {
     deliveredAt: nota.deliveredAt || null,
     dueAt: nota.dueAt || null,
     saldo,
+    saldoFavor,
     pagado, // devuelto calculado
     statusCredito,
   };
@@ -527,7 +532,8 @@ app.post("/api/pago", (req, res) => {
     const { id, monto } = req.body || {};
     const val = Number(monto);
 
-    if (!id || !Number.isFinite(val) || val <= 0) {
+    // Permitimos negativos (ajustes / reversos por duplicado), pero no 0.
+    if (!id || !Number.isFinite(val) || val === 0) {
       return res.status(400).json({ ok: false, message: "Datos inválidos" });
     }
 
@@ -541,16 +547,24 @@ app.post("/api/pago", (req, res) => {
     if (!Array.isArray(n.pagos)) n.pagos = [];
 
     // Push new payment with SERVER DATE (Independencia Cronológica)
-    // El prompt dice: "Asegura que los nuevos pagos registrados siempre tomen 
+    // El prompt dice: "Asegura que los nuevos pagos registrados siempre tomen
     // la fecha real del servidor, sin importar el estado del botón de cierre."
     n.pagos.push({
       fecha: new Date().toISOString(),
       monto: val,
-      tipo: 'ABONO'
+      tipo: val < 0 ? 'AJUSTE' : 'ABONO'
     });
 
     // Update cache
     n.pagado = n.pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+
+    // Guard: el pagado acumulado no puede quedar en negativo.
+    // (Saldo a favor sí está permitido — cuando pagado > total.)
+    if (n.pagado < 0) {
+      n.pagos.pop();
+      n.pagado = n.pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+      return res.status(400).json({ ok: false, message: "El ajuste dejaría el pagado en negativo. Reduce el monto del ajuste." });
+    }
 
     if (n.deliveredAt && !n.firstPaymentAt) {
       n.firstPaymentAt = new Date().toISOString();

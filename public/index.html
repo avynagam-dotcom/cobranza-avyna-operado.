@@ -963,7 +963,10 @@
         const client = escapeHtml(n.cliente || n.originalName || n.filename || "—");
         const total = money(n.total);
         const pagado = money(n.pagado || 0);
-        const saldo = money(n.saldo);
+        const saldoFavor = Number(n.saldoFavor) || 0;
+        const saldoCell = saldoFavor > 0
+          ? `<div style="color:#57d47a; font-weight:800">+${money(saldoFavor)}</div><div style="font-size:10px; color:#57d47a; opacity:0.9; margin-top:2px">Saldo a favor</div>`
+          : `<b>${money(n.saldo)}</b>`;
 
         const st = statusLabel(n);
         const due = n.dueAt ? new Date(n.dueAt).toLocaleDateString("es-MX") : null;
@@ -994,7 +997,7 @@
             </td>
             <td class="right">${total}</td>
             <td class="right">${pagado}</td>
-            <td class="right"><b>${saldo}</b></td>
+            <td class="right">${saldoCell}</td>
             <td>${statusHtml}</td>
             <td>${actionHtml}</td>
           </tr>
@@ -1163,7 +1166,8 @@
     cancelPay.addEventListener("click", () => overlayPay.classList.remove("show"));
     savePay.addEventListener("click", async () => {
         const val = parseFloat(payAmount.value);
-        if(!val || val <= 0) return alert("Monto inválido");
+        // Permitimos negativos (ajustes / reversos). Solo bloqueamos 0 o no-número.
+        if(!Number.isFinite(val) || val === 0) return alert("Monto inválido");
         
         try {
             const res = await fetch("/api/pago", {
