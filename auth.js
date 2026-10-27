@@ -70,6 +70,9 @@ function createAuth(opts) {
       : process.env.RESEND_API_KEY && process.env.CORREO_REMITENTE
         ? resendSender({ apiKey: process.env.RESEND_API_KEY, remitente: process.env.CORREO_REMITENTE, rpName })
         : null;
+  // Token de solo lectura (LECTURA_TOKEN en el entorno): deja que las herramientas
+  // de Claude consulten el tablero (GET) para conciliar. Nunca escribe.
+  const readToken = opts.readToken !== undefined ? opts.readToken : process.env.LECTURA_TOKEN || "";
   const file = path.join(dataDir, "auth.json");
   const loginHtml = fs.readFileSync(path.join(__dirname, "auth-login.html"), "utf8");
 
@@ -339,6 +342,13 @@ function createAuth(opts) {
     if (email) {
       req.authUser = email;
       return next();
+    }
+    if (readToken && (req.method === "GET" || req.method === "HEAD")) {
+      const m = /^Bearer (.+)$/.exec(String(req.headers.authorization || ""));
+      if (m && sameString(sha256(m[1]).toString("hex"), sha256(readToken).toString("hex"))) {
+        req.authUser = "lectura-claude";
+        return next();
+      }
     }
     if (req.method === "GET" && req.path === "/apple-touch-icon.png") return next();
     if (req.method === "GET" && (req.path === "/" || req.path === "/index.html")) {

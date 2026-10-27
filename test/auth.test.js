@@ -19,7 +19,9 @@ const NETIE = "netie@example.com";
 
 let dir, clock, auth, app, mails, logs;
 
-function build({ allow = [MAR, NETIE], disabled = false, noSender = false } = {}) {
+const READ_TOKEN = "token-de-lectura-de-prueba-1234567890";
+
+function build({ allow = [MAR, NETIE], disabled = false, noSender = false, readToken = READ_TOKEN } = {}) {
   dir = dir || fs.mkdtempSync(path.join(os.tmpdir(), "auth-test-"));
   mails = [];
   logs = [];
@@ -30,6 +32,7 @@ function build({ allow = [MAR, NETIE], disabled = false, noSender = false } = {}
     rpID: RP_ID,
     origin: ORIGIN,
     sendMail: noSender ? null : async (m) => mails.push(m),
+    readToken,
     disabled,
     now: () => clock,
     log: (m) => logs.push(m),
@@ -38,6 +41,7 @@ function build({ allow = [MAR, NETIE], disabled = false, noSender = false } = {}
   app.use(express.json());
   app.use(auth.middleware);
   app.get("/api/secret", (req, res) => res.json({ who: req.authUser }));
+  app.post("/api/secret", (req, res) => res.json({ wrote: true }));
   app.get("/", (req, res) => res.send("TABLERO-REAL"));
 }
 
@@ -357,3 +361,40 @@ test("el archivo de llaves no guarda llave privada ni código de invitación", a
   assert.ok(raw.includes(MAR));
 });
 
+
+// ---------- Token de solo lectura (para que Claude concilie sin entrar por el login)
+
+test("token de lectura: GET con Bearer correcto entra, sin cookie", async () => {
+  const r = await request(app).get("/api/secret").set("Authorization", `Bearer ${READ_TOKEN}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.who, "lectura-claude");
+  assert.equal(r.headers["set-cookie"], undefined);
+});
+
+test("token de lectura: nunca escribe (POST/PUT/DELETE → 401)", async () => {
+  for (const m of ["post", "put", "delete", "patch"]) {
+    const r = await request(app)[m]("/api/secret").set("Authorization", `Bearer ${READ_TOKEN}`);
+    assert.equal(r.status, 401, `${m} debía dar 401`);
+  }
+});
+
+test("token de lectura: token incorrecto o parecido → 401", async () => {
+  for (const bad of ["otro", READ_TOKEN.slice(0, -1), `${READ_TOKEN}x`, ""]) {
+    const r = await request(app).get("/api/secret").set("Authorization", `Bearer ${bad}`);
+    assert.equal(r.status, 401, `"${bad}" debía dar 401`);
+  }
+  assert.equal((await request(app).get("/api/secret").set("Authorization", `Basic ${READ_TOKEN}`)).status, 401);
+});
+
+test("token de lectura: sin token configurado en el servidor, ningún Bearer sirve", async () => {
+  build({ readToken: "" });
+  assert.equal((await request(app).get("/api/secret").set("Authorization", "Bearer ")).status, 401);
+  assert.equal((await request(app).get("/api/secret").set("Authorization", "Bearer undefined")).status, 401);
+});
+
+test("token de lectura: no abre las rutas de Face ID ni crea sesión", async () => {
+  const r = await request(app).post("/auth/register/options").set("Authorization", `Bearer ${READ_TOKEN}`).send({ email: MAR });
+  assert.equal(r.status, 403);
+  const me = await request(app).get("/auth/me").set("Authorization", `Bearer ${READ_TOKEN}`);
+  assert.equal(me.status, 401);
+});
