@@ -34,6 +34,20 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 
 const { DATA_DIR, UPLOADS_DIR, USE_PERSISTENT, loadDB, saveDB } = persistence;
 
+// ----- Login con Face ID (passkeys). Debe ir ANTES de cualquier ruta o static.
+// Lista de personas permitidas en auth-allow.json. AUTH_DISABLED=1 lo apaga
+// (solo emergencia / pruebas).
+const { createAuth } = require("./auth");
+app.use(
+  createAuth({
+    dataDir: DATA_DIR,
+    allow: require("./auth-allow.json").allow,
+    rpName: "Avyna Cobranza Operado",
+    disabled: process.env.AUTH_DISABLED === "1",
+  }).middleware
+);
+
+
 // ----- Status Persistence (Closing Control)
 const STATUS_FILE = path.join(DATA_DIR, "status.json");
 function loadStatus() {

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#FBFAF7">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Avyna Cobranza · Entrar</title>
+<style>
+  :root { --bg:#FBFAF7; --card:#FFFFFF; --ink:#1C1B18; --muted:#6B665C; --accent:#8A3B5C; --accent-ink:#FFFFFF; --bad:#B3261E; --line:#E6E2D9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14130F; --card:#1E1D18; --ink:#F3F1EA; --muted:#A39E92; --accent:#D88AAE; --accent-ink:#14130F; --bad:#FF8A80; --line:#33312A; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:16px;
+    background:var(--bg); color:var(--ink); font:18px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:32px 24px; text-align:center; }
+  .lock { width:56px; height:56px; margin:0 auto 16px; color:var(--accent); }
+  h1 { font-size:24px; margin:0 0 8px; }
+  p { margin:0 0 24px; color:var(--muted); }
+  button { width:100%; min-height:56px; border:0; border-radius:14px; background:var(--accent); color:var(--accent-ink);
+    font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  #msg { min-height:1.5em; margin:16px 0 0; font-size:16px; color:var(--muted); }
+  #msg.bad { color:var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>
+  </svg>
+  <h1 id="title">Avyna Cobranza</h1>
+  <p id="sub">Entra con Face ID.</p>
+  <button id="go" type="button">Entrar con Face ID</button>
+  <div id="msg" role="status" aria-live="polite"></div>
+</main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var registering = location.pathname.indexOf("/auth/registro") === 0 && q.get("email") && q.get("code");
+  var go = document.getElementById("go"), msg = document.getElementById("msg");
+
+  if (registering) {
+    document.getElementById("title").textContent = "Activa tu Face ID";
+    document.getElementById("sub").textContent = "Solo se hace una vez en este teléfono.";
+    go.textContent = "Activar Face ID";
+  }
+
+  function enc(buf) {
+    var s = ""; var b = new Uint8Array(buf);
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function dec(str) {
+    str = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (str.length % 4) str += "=";
+    var s = atob(str), b = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b.buffer;
+  }
+  function say(text, bad) { msg.textContent = text; msg.className = bad ? "bad" : ""; }
+
+  function post(url, body) {
+    return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body || {}) })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) { var e = new Error(j.error || "Error"); e.status = r.status; throw e; }
+          return j;
+        });
+      });
+  }
+
+  function register() {
+    var email = q.get("email"), code = q.get("code");
+    return post("/auth/register/options", { email: email, code: code }).then(function (opts) {
+      opts.challenge = dec(opts.challenge);
+      opts.user.id = dec(opts.user.id);
+      (opts.excludeCredentials || []).forEach(function (c) { c.id = dec(c.id); });
+      return navigator.credentials.create({ publicKey: opts });
+    }).then(function (cred) {
+      var r = cred.response;
+      return post("/auth/register/verify", {
+        email: email,
+        response: {
+          id: cred.id, rawId: enc(cred.rawId), type: cred.type,
+          response: {
+            clientDataJSON: enc(r.clientDataJSON),
+            attestationObject: enc(r.attestationObject),
+            transports: r.getTransports ? r.getTransports() : []
+          },
+          clientExtensionResults: cred.getClientExtensionResults(),
+          authenticatorAttachment: cred.authenticatorAttachment
+        }
+      });
+    });
+  }
+
+  function login() {
+    return post("/auth/login/options").then(function (opts) {
+      opts.challenge = dec(opts.challenge);
+      return navigator.credentials.get({ publicKey: opts });
+    }).then(function (cred) {
+      var r = cred.response;
+      return post("/auth/login/verify", {
+        response: {
+          id: cred.id, rawId: enc(cred.rawId), type: cred.type,
+          response: {
+            clientDataJSON: enc(r.clientDataJSON),
+            authenticatorData: enc(r.authenticatorData),
+            signature: enc(r.signature),
+            userHandle: r.userHandle ? enc(r.userHandle) : null
+          },
+          clientExtensionResults: cred.getClientExtensionResults(),
+          authenticatorAttachment: cred.authenticatorAttachment
+        }
+      });
+    });
+  }
+
+  function friendly(err) {
+    if (err && err.name === "NotAllowedError") return "Cancelaste Face ID. Toca el botón para intentar de nuevo.";
+    if (err && err.name === "InvalidStateError") return "Este teléfono ya estaba registrado. Toca Entrar.";
+    if (err && err.status === 429) return "Demasiados intentos. Espera unos minutos.";
+    if (err && err.status === 403) return registering ? "Esta invitación ya no sirve. Pide una nueva." : "Tu cuenta no tiene acceso a este tablero.";
+    if (err && err.status === 401) return "No se pudo verificar. Intenta de nuevo.";
+    return "Algo falló. Intenta de nuevo.";
+  }
+
+  if (!window.PublicKeyCredential) {
+    go.disabled = true;
+    say("Este navegador no soporta Face ID. Abre el enlace en Safari o Chrome.", true);
+    return;
+  }
+
+  go.addEventListener("click", function () {
+    go.disabled = true; say("Esperando Face ID…");
+    (registering ? register() : login()).then(function () {
+      say("Listo.");
+      location.replace("/");
+    }).catch(function (err) {
+      go.disabled = false; say(friendly(err), true);
+    });
+  });
+})();
+</script>
+</body>
+</html>
