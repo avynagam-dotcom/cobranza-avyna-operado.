@@ -8,9 +8,9 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Avyna Cobranza · Entrar</title>
 <style>
-  :root { --bg:#FBFAF7; --card:#FFFFFF; --ink:#1C1B18; --muted:#6B665C; --accent:#8A3B5C; --accent-ink:#FFFFFF; --bad:#B3261E; --line:#E6E2D9; }
+  :root { --bg:#FBFAF7; --card:#FFFFFF; --ink:#1C1B18; --muted:#6B665C; --accent:#8A3B5C; --accent-ink:#FFFFFF; --bad:#B3261E; --line:#D9D4C8; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#14130F; --card:#1E1D18; --ink:#F3F1EA; --muted:#A39E92; --accent:#D88AAE; --accent-ink:#14130F; --bad:#FF8A80; --line:#33312A; }
+    :root { --bg:#14130F; --card:#1E1D18; --ink:#F3F1EA; --muted:#A39E92; --accent:#D88AAE; --accent-ink:#14130F; --bad:#FF8A80; --line:#4A473E; }
   }
   * { box-sizing:border-box; }
   body { margin:0; min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:16px;
@@ -18,11 +18,16 @@
   main { width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:32px 24px; text-align:center; }
   .lock { width:56px; height:56px; margin:0 auto 16px; color:var(--accent); }
   h1 { font-size:24px; margin:0 0 8px; }
-  p { margin:0 0 24px; color:var(--muted); }
+  p { margin:0 0 20px; color:var(--muted); }
+  input { width:100%; min-height:56px; border:1px solid var(--line); border-radius:14px; padding:0 16px; margin:0 0 12px;
+    background:var(--bg); color:var(--ink); font:inherit; text-align:center; }
+  input.code { letter-spacing:8px; font-size:26px; font-weight:600; }
   button { width:100%; min-height:56px; border:0; border-radius:14px; background:var(--accent); color:var(--accent-ink);
     font:inherit; font-weight:600; cursor:pointer; }
+  button.link { background:none; color:var(--muted); font-weight:500; min-height:48px; margin-top:4px; text-decoration:underline; }
   button:disabled { opacity:.6; cursor:default; }
-  #msg { min-height:1.5em; margin:16px 0 0; font-size:16px; color:var(--muted); }
+  [hidden] { display:none !important; }
+  #msg { min-height:1.5em; margin:12px 0 0; font-size:16px; color:var(--muted); }
   #msg.bad { color:var(--bad); }
 </style>
 </head>
@@ -31,25 +36,52 @@
   <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>
   </svg>
-  <h1 id="title">Avyna Cobranza</h1>
-  <p id="sub">Entra con Face ID.</p>
-  <button id="go" type="button">Entrar con Face ID</button>
+
+  <section id="v-faceid" hidden>
+    <h1>Avyna Cobranza</h1>
+    <p>Entra con Face ID.</p>
+    <button id="b-faceid" type="button">Entrar con Face ID</button>
+    <button id="b-use-email" class="link" type="button">Usar mi correo</button>
+  </section>
+
+  <form id="v-email" hidden>
+    <h1>Avyna Cobranza</h1>
+    <p>Escribe tu correo y te mandamos un código.</p>
+    <input id="i-email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" placeholder="tu@correo.com" required>
+    <button id="b-send" type="submit">Enviar código</button>
+  </form>
+
+  <form id="v-code" hidden>
+    <h1>Revisa tu correo</h1>
+    <p id="t-code">Te mandamos un código de 6 dígitos.</p>
+    <input id="i-code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="······" required>
+    <button id="b-enter" type="submit">Entrar</button>
+    <button id="b-back" class="link" type="button">Usar otro correo</button>
+  </form>
+
+  <section id="v-device" hidden>
+    <h1>¿Activar Face ID?</h1>
+    <p>Así la próxima vez entras con un toque en este teléfono, sin pedir código.</p>
+    <button id="b-activate" type="button">Activar Face ID</button>
+    <button id="b-skip" class="link" type="button">Ahora no</button>
+  </section>
+
   <div id="msg" role="status" aria-live="polite"></div>
 </main>
 <script>
 (function () {
-  var q = new URLSearchParams(location.search);
-  var registering = location.pathname.indexOf("/auth/registro") === 0 && q.get("email") && q.get("code");
-  var go = document.getElementById("go"), msg = document.getElementById("msg");
+  var $ = function (id) { return document.getElementById(id); };
+  var msg = $("msg"), views = ["v-faceid", "v-email", "v-code", "v-device"];
+  var KEY_ON = "avyna_faceid", KEY_SKIP = "avyna_faceid_skip", SKIP_MS = 7 * 24 * 3600 * 1000;
+  var currentEmail = "";
 
-  if (registering) {
-    document.getElementById("title").textContent = "Activa tu Face ID";
-    document.getElementById("sub").textContent = "Solo se hace una vez en este teléfono.";
-    go.textContent = "Activar Face ID";
-  }
+  function store(op, k, v) { try { return op === "get" ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch (e) { return null; } }
+  function show(id) { views.forEach(function (v) { $(v).hidden = v !== id; }); say(""); }
+  function say(text, bad) { msg.textContent = text; msg.className = bad ? "bad" : ""; }
+  function busy(btn, on, label) { btn.disabled = on; if (label) btn.dataset.label = label; }
 
   function enc(buf) {
-    var s = ""; var b = new Uint8Array(buf);
+    var s = "", b = new Uint8Array(buf);
     for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
@@ -60,7 +92,6 @@
     for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
     return b.buffer;
   }
-  function say(text, bad) { msg.textContent = text; msg.className = bad ? "bad" : ""; }
 
   function post(url, body) {
     return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body || {}) })
@@ -72,77 +103,113 @@
       });
   }
 
-  function register() {
-    var email = q.get("email"), code = q.get("code");
-    return post("/auth/register/options", { email: email, code: code }).then(function (opts) {
+  var hasWebAuthn = !!(window.PublicKeyCredential && navigator.credentials);
+  function platformAvailable() {
+    if (!hasWebAuthn || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false);
+    return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+  }
+  function skipRecent() { var t = parseInt(store("get", KEY_SKIP) || "0", 10); return t && Date.now() - t < SKIP_MS; }
+
+  // ---- Face ID (entrar)
+  function faceIdLogin() {
+    return post("/auth/login/options").then(function (opts) {
+      opts.challenge = dec(opts.challenge);
+      return navigator.credentials.get({ publicKey: opts });
+    }).then(function (cred) {
+      var r = cred.response;
+      return post("/auth/login/verify", { response: {
+        id: cred.id, rawId: enc(cred.rawId), type: cred.type,
+        response: { clientDataJSON: enc(r.clientDataJSON), authenticatorData: enc(r.authenticatorData), signature: enc(r.signature), userHandle: r.userHandle ? enc(r.userHandle) : null },
+        clientExtensionResults: cred.getClientExtensionResults(), authenticatorAttachment: cred.authenticatorAttachment
+      } });
+    });
+  }
+
+  // ---- Face ID (activar, ya con sesión)
+  function faceIdRegister() {
+    return post("/auth/register/options", { email: currentEmail }).then(function (opts) {
       opts.challenge = dec(opts.challenge);
       opts.user.id = dec(opts.user.id);
       (opts.excludeCredentials || []).forEach(function (c) { c.id = dec(c.id); });
       return navigator.credentials.create({ publicKey: opts });
     }).then(function (cred) {
       var r = cred.response;
-      return post("/auth/register/verify", {
-        email: email,
-        response: {
-          id: cred.id, rawId: enc(cred.rawId), type: cred.type,
-          response: {
-            clientDataJSON: enc(r.clientDataJSON),
-            attestationObject: enc(r.attestationObject),
-            transports: r.getTransports ? r.getTransports() : []
-          },
-          clientExtensionResults: cred.getClientExtensionResults(),
-          authenticatorAttachment: cred.authenticatorAttachment
-        }
-      });
-    });
-  }
-
-  function login() {
-    return post("/auth/login/options").then(function (opts) {
-      opts.challenge = dec(opts.challenge);
-      return navigator.credentials.get({ publicKey: opts });
-    }).then(function (cred) {
-      var r = cred.response;
-      return post("/auth/login/verify", {
-        response: {
-          id: cred.id, rawId: enc(cred.rawId), type: cred.type,
-          response: {
-            clientDataJSON: enc(r.clientDataJSON),
-            authenticatorData: enc(r.authenticatorData),
-            signature: enc(r.signature),
-            userHandle: r.userHandle ? enc(r.userHandle) : null
-          },
-          clientExtensionResults: cred.getClientExtensionResults(),
-          authenticatorAttachment: cred.authenticatorAttachment
-        }
-      });
+      return post("/auth/register/verify", { email: currentEmail, response: {
+        id: cred.id, rawId: enc(cred.rawId), type: cred.type,
+        response: { clientDataJSON: enc(r.clientDataJSON), attestationObject: enc(r.attestationObject), transports: r.getTransports ? r.getTransports() : [] },
+        clientExtensionResults: cred.getClientExtensionResults(), authenticatorAttachment: cred.authenticatorAttachment
+      } });
     });
   }
 
   function friendly(err) {
-    if (err && err.name === "NotAllowedError") return "Cancelaste Face ID. Toca el botón para intentar de nuevo.";
-    if (err && err.name === "InvalidStateError") return "Este teléfono ya estaba registrado. Toca Entrar.";
-    if (err && err.status === 429) return "Demasiados intentos. Espera unos minutos.";
-    if (err && err.status === 403) return registering ? "Esta invitación ya no sirve. Pide una nueva." : "Tu cuenta no tiene acceso a este tablero.";
-    if (err && err.status === 401) return "No se pudo verificar. Intenta de nuevo.";
+    if (err && err.name === "NotAllowedError") return "Cancelaste Face ID. Intenta de nuevo.";
+    if (err && err.status === 401) return "Código incorrecto o vencido. Pide uno nuevo.";
+    if (err && err.status === 403) return "No se pudo continuar. Vuelve a entrar con tu correo.";
     return "Algo falló. Intenta de nuevo.";
   }
 
-  if (!window.PublicKeyCredential) {
-    go.disabled = true;
-    say("Este navegador no soporta Face ID. Abre el enlace en Safari o Chrome.", true);
-    return;
+  function goHome() { location.replace("/"); }
+
+  function afterLogin() {
+    platformAvailable().then(function (ok) {
+      if (ok && store("get", KEY_ON) !== "1" && !skipRecent()) location.replace("/auth/dispositivo");
+      else goHome();
+    });
   }
 
-  go.addEventListener("click", function () {
-    go.disabled = true; say("Esperando Face ID…");
-    (registering ? register() : login()).then(function () {
-      say("Listo.");
-      location.replace("/");
-    }).catch(function (err) {
-      go.disabled = false; say(friendly(err), true);
+  // ---- Eventos
+  $("b-faceid").addEventListener("click", function () {
+    busy($("b-faceid"), true); say("Esperando Face ID…");
+    faceIdLogin().then(goHome).catch(function (err) {
+      busy($("b-faceid"), false);
+      if (err && err.status) { try { localStorage.removeItem(KEY_ON); } catch (e) {} show("v-email"); say("Entra con tu correo.", false); }
+      else say(friendly(err), true);
     });
   });
+  $("b-use-email").addEventListener("click", function () { show("v-email"); });
+
+  $("v-email").addEventListener("submit", function (e) {
+    e.preventDefault();
+    currentEmail = $("i-email").value.trim().toLowerCase();
+    busy($("b-send"), true); say("Enviando…");
+    post("/auth/codigo/pedir", { email: currentEmail }).then(function () {
+      busy($("b-send"), false);
+      $("t-code").textContent = "Te mandamos un código de 6 dígitos a " + currentEmail + ". Puede tardar un minuto.";
+      show("v-code"); $("i-code").value = ""; $("i-code").focus();
+    }).catch(function (err) { busy($("b-send"), false); say(friendly(err), true); });
+  });
+
+  $("v-code").addEventListener("submit", function (e) {
+    e.preventDefault();
+    busy($("b-enter"), true); say("Verificando…");
+    post("/auth/codigo/entrar", { email: currentEmail, code: $("i-code").value }).then(afterLogin)
+      .catch(function (err) { busy($("b-enter"), false); say(friendly(err), true); });
+  });
+  $("b-back").addEventListener("click", function () { show("v-email"); });
+
+  $("b-activate").addEventListener("click", function () {
+    busy($("b-activate"), true); say("Esperando Face ID…");
+    faceIdRegister().then(function () { store("set", KEY_ON, "1"); goHome(); }).catch(function (err) {
+      busy($("b-activate"), false);
+      if (err && err.name === "NotAllowedError") say("Cancelaste. Puedes activarlo después o seguir con tu correo.", true);
+      else say("Este teléfono no pudo activar Face ID. Puedes seguir entrando con tu correo.", true);
+    });
+  });
+  $("b-skip").addEventListener("click", function () { store("set", KEY_SKIP, String(Date.now())); goHome(); });
+
+  // ---- Arranque
+  if (location.pathname.indexOf("/auth/dispositivo") === 0) {
+    fetch("/auth/me", { credentials: "same-origin" }).then(function (r) {
+      if (!r.ok) throw new Error("sin sesión");
+      return r.json();
+    }).then(function (me) { currentEmail = me.email; show("v-device"); })
+      .catch(function () { location.replace("/"); });
+  } else if (hasWebAuthn && store("get", KEY_ON) === "1") {
+    show("v-faceid");
+  } else {
+    show("v-email");
+  }
 })();
 </script>
 </body>
